@@ -35,11 +35,14 @@ parser.add_argument('--cuda', action="store_true",
                     help='run on CUDA (default: False)')
 args = parser.parse_args()
 
-DATA_LOADERS = {
-    'BTC-USD': YahooFinanceDataLoader('BTC-USD','BTC-USD.csv',
-                                      split_point='2021-01-10',
-                                      load_from_file=False)
-}
+# DATA_LOADERS = {
+#     'LUNA-USDT': YahooFinanceDataLoader('LUNAUSDT','LUNA-USDT.csv',
+#                                       split_point='2021-01-10',
+#                                       load_from_file=False,load_from_binance=True),
+#     'BTC-USDT': YahooFinanceDataLoader('BTCUSDT','BTC-USDT.csv',
+#                                       split_point='2021-01-10',
+#                                       load_from_file=False,load_from_binance=True)
+# }
 
 
 class SensitivityRun:
@@ -73,7 +76,10 @@ class SensitivityRun:
             or 'replay memory size'
         @param transaction_cost:
         """
-        self.data_loader = DATA_LOADERS[dataset_name]
+        # self.data_loader = DATA_LOADERS[dataset_name]
+        self.data_loader = YahooFinanceDataLoader(dataset_name,dataset_name+'.csv',
+                                      split_point='2021-01-10',
+                                      load_from_file=False,load_from_binance=True)
         self.dataset_name = dataset_name
         self.gamma = gamma
         self.batch_size = batch_size
@@ -123,20 +129,21 @@ class SensitivityRun:
             os.makedirs(self.experiment_path)
 
         self.reset()
-        self.test_portfolios = {'DQN-pattern': {},
-                                'DQN-vanilla': {},
-                                'DQN-candlerep': {},
-                                'DQN-windowed': {},
-                                'MLP-pattern': {},
-                                'MLP-vanilla': {},
-                                'MLP-candlerep': {},
-                                'MLP-windowed': {},
-                                'CNN1d': {},
-                                'CNN2d': {},
-                                'GRU': {},
-                                'Deep-CNN': {},
-                                'CNN-GRU': {},
-                                'CNN-ATTN': {}}
+        # self.test_portfolios = {'DQN-pattern': {},
+        #                         'DQN-vanilla': {},
+        #                         'DQN-candlerep': {},
+        #                         'DQN-windowed': {},
+        #                         'MLP-pattern': {},
+        #                         'MLP-vanilla': {},
+        #                         'MLP-candlerep': {},
+        #                         'MLP-windowed': {},
+        #                         'CNN1d': {},
+        #                         'CNN2d': {},
+        #                         'GRU': {},
+        #                         'Deep-CNN': {},
+        #                         'CNN-GRU': {},
+        #                         'CNN-ATTN': {}}
+        self.test_portfolios = {'Deep-CNN': {}}
 
     def reset(self):
         self.load_data()
@@ -240,6 +247,7 @@ class SensitivityRun:
                                                   self.transaction_cost)
 
     def load_agents(self):
+        """
         self.dqn_pattern = DeepRL(self.data_loader,
                                   self.dataTrain_patternBased,
                                   self.dataTest_patternBased,
@@ -387,7 +395,7 @@ class SensitivityRun:
                        TARGET_UPDATE=self.target_update,
                        n_step=self.n_step,
                        window_size=self.window_size)
-
+        """
         self.deep_cnn = CNN(self.data_loader,
                             self.dataTrain_sequential,
                             self.dataTest_sequential,
@@ -399,7 +407,7 @@ class SensitivityRun:
                             TARGET_UPDATE=self.target_update,
                             n_step=self.n_step,
                             window_size=self.window_size)
-
+        """
         self.cnn_gru = CNN_GRU(self.data_loader,
                                self.dataTrain_sequential,
                                self.dataTest_sequential,
@@ -425,8 +433,9 @@ class SensitivityRun:
                                  TARGET_UPDATE=self.target_update,
                                  n_step=self.n_step,
                                  window_size=self.window_size)
-
+        """
     def train(self):
+        """
         self.dqn_pattern.train(self.n_episodes)
         self.dqn_vanilla.train(self.n_episodes)
         self.dqn_candle_rep.train(self.n_episodes)
@@ -438,10 +447,12 @@ class SensitivityRun:
         self.cnn1d.train(self.n_episodes)
         self.cnn2d.train(self.n_episodes)
         self.gru.train(self.n_episodes)
+        """
         self.deep_cnn.train(self.n_episodes)  
+        """
         self.cnn_gru.train(self.n_episodes)
         self.cnn_attn.train(self.n_episodes)
-
+        """
     def evaluate_sensitivity(self):
         key = None
         if self.evaluation_parameter == 'gamma':
@@ -450,7 +461,7 @@ class SensitivityRun:
             key = self.batch_size
         elif self.evaluation_parameter == 'replay memory size':
             key = self.replay_memory_size
-
+        """
         self.test_portfolios['DQN-pattern'][key] = self.dqn_pattern.test().get_daily_portfolio_value()
         self.test_portfolios['DQN-vanilla'][key] = self.dqn_vanilla.test().get_daily_portfolio_value()
         self.test_portfolios['DQN-candlerep'][
@@ -464,9 +475,12 @@ class SensitivityRun:
         self.test_portfolios['CNN1d'][key] = self.cnn1d.test().get_daily_portfolio_value()
         self.test_portfolios['CNN2d'][key] = self.cnn2d.test().get_daily_portfolio_value()
         self.test_portfolios['GRU'][key] = self.gru.test().get_daily_portfolio_value()
+        """
         self.test_portfolios['Deep-CNN'][key] = self.deep_cnn.test().get_daily_portfolio_value()
+        """
         self.test_portfolios['CNN-GRU'][key] = self.cnn_gru.test().get_daily_portfolio_value()
         self.test_portfolios['CNN-ATTN'][key] = self.cnn_attn.test().get_daily_portfolio_value()
+        """
 
     def plot_and_save_sensitivity(self):
         plot_path = os.path.join(self.experiment_path, 'plots')

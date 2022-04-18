@@ -9,9 +9,11 @@ import seaborn as sns
 import os
 import ast
 from pathlib import Path
+import datetime
+
 class YahooFinanceDataLoader:
     """ Dataset form GOOGLE"""
-    def __init__(self, dataset_folder, file_name, split_point, begin_date=None, end_date=None, load_from_file=False):
+    def __init__(self, dataset_folder, file_name, split_point, begin_date=None, end_date=None, load_from_file=False,load_from_binance=True):
         """
         :param dataset_folder
             folder name in './Data' directory
@@ -32,6 +34,7 @@ class YahooFinanceDataLoader:
         :param split_point
             The point (date) between begin_date and end_date that you want to split the train and test sets.
         """
+        print('Loading data for ',dataset_folder)
         warnings.filterwarnings('ignore')
         self.DATA_NAME = dataset_folder
         self.DATA_PATH = os.path.join(Path(os.path.abspath(os.path.dirname(__file__))).parent,
@@ -41,11 +44,13 @@ class YahooFinanceDataLoader:
         self.split_point = split_point
         self.begin_date = begin_date
         self.end_date = end_date
+        self.load_from_binance = load_from_binance
         if not load_from_file:
             self.data, self.patterns = self.load_data()
             self.save_pattern()
             self.normalize_data()
-            self.data.to_csv(f'{self.DATA_PATH}data_processed.csv', index=True)
+            if(self.load_from_binance==False):
+                self.data.to_csv(f'{self.DATA_PATH}data_processed.csv', index=True)
             if begin_date is not None:
                 self.data = self.data[self.data.index >= begin_date]
             if end_date is not None:
@@ -88,20 +93,54 @@ class YahooFinanceDataLoader:
             self.data_train.reset_index(drop=True, inplace=True)
             self.data_test.reset_index(drop=True, inplace=True)
             # self.data.reset_index(drop=True, inplace=True)
+    def ms_to_dt_utc(self,ms: int) -> datetime:
+        return datetime.datetime.fromtimestamp(ms / 1000)
+
+    def get_klines_iter(self,symbol, interval, start, end, limit=1000):
+        df = pd.DataFrame()
+        startDate = start
+        while startDate<=end:
+            url = 'https://api.binance.com/api/v3/klines?symbol=' + \
+                symbol + '&interval=' + interval + '&limit='  + str(limit)
+            url += '&startTime=' + str(startDate)
+            df2 = pd.read_json(url)
+            if(len(df2)==0):
+                break
+            startDate = int(round(df2[0][len(df2[0])-1]))+1
+            df2.columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Closetime', 'Quote asset volume', 'Number of trades','Taker by base', 'Taker buy quote', 'Ignore']
+            df = pd.concat([df2, df], axis=0, ignore_index=True, keys=None)
+        df = df.drop(['Closetime', 'Quote asset volume', 'Number of trades','Taker by base', 'Taker buy quote', 'Ignore'], axis=1)
+        df["Date"] = df["Date"].apply(lambda x: self.ms_to_dt_utc(x))
+        df.reset_index(drop=True, inplace=True)    
+        return df 
 
     def load_data(self):
         """
         This function is used to read and clean data from .csv file.
         @return:
         """
-        data = pd.read_csv(f'{self.DATA_PATH}{self.DATA_FILE}')
-        data.dropna(inplace=True)
-        data.set_index('Date', inplace=True)
-        data.rename(columns={'Close': 'close', 'Open': 'open', 'High': 'high', 'Low': 'low'}, inplace=True)
-        data = data.drop(['Adj Close', 'Volume'], axis=1)
-        data['mean_candle'] = data.close
-        patterns = label_candles(data)
-        return data, list(patterns.keys())
+        if self.load_from_binance :
+            datefrom = datetime.datetime(2020, 1, 1, 0, 0)
+            timestamp_datefrom = int(round(datefrom.timestamp()))
+            dateto = datetime.datetime.now()
+            timestamp_dateto = int(round(dateto.timestamp()))
+            data = self.get_klines_iter(self.DATA_NAME,'1d',timestamp_datefrom*1000 ,timestamp_dateto*1000)
+            data.dropna(inplace=True)
+            data.set_index('Date', inplace=True)
+            data.rename(columns={'Close': 'close', 'Open': 'open', 'High': 'high', 'Low': 'low'}, inplace=True)
+            data['mean_candle'] = data.close
+            patterns = label_candles(data)
+            print('Loaded data',data)
+            return data, list(patterns.keys())
+        else:
+            data = pd.read_csv(f'{self.DATA_PATH}{self.DATA_FILE}')
+            data.dropna(inplace=True)
+            data.set_index('Date', inplace=True)
+            data.rename(columns={'Close': 'close', 'Open': 'open', 'High': 'high', 'Low': 'low'}, inplace=True)
+            data = data.drop(['Adj Close', 'Volume'], axis=1)
+            data['mean_candle'] = data.close
+            patterns = label_candles(data)
+            return data, list(patterns.keys())
 
     def plot_data(self):
         """
